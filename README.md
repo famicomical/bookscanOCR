@@ -16,7 +16,7 @@ Compare to [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF/) but simplified for 
 - Runs offline
 
 ## Installation
-First, install [Python](https://www.python.org/downloads/) (3.8+)
+First, install [Python](https://www.python.org/downloads/) or update your installation to 3.8+
 
 You can then use pip to install the following dependencies:
 `pip install numpy`
@@ -26,7 +26,7 @@ You can then use pip to install the following dependencies:
 `pip install PyMuPDF`
 `pip install pytesseract`
 
-Place the .py scripts from this repository into your project directory, and, if you're on Windows, grab jbig2.exe from [here](https://sourceforge.net/projects/jbig2enc/files/latest/download) and place it in the same directory.
+Place the .py scripts from this repository into your project directory. If you're on Windows, grab jbig2.exe from [here](https://sourceforge.net/projects/jbig2enc/files/latest/download) and place it in the same directory.
 
 ## Usage
 `>python bookscanOCR.py -h`
