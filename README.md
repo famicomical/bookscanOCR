@@ -76,4 +76,4 @@ CCITT G4 encoding routine from [josch](https://github.com/josch/img2pdf)'s  img2
 ### to-do:
 - finesse handling of pages containing images without text
 - apply deskewing to pre-existing hOCR layer
-- make scaling more robust by chopping input file according to available memory and storage resources
+- make scaling more robust by chopping input file according to available memory
