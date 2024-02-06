@@ -65,6 +65,14 @@ optional arguments:
 
 2- There is a quirk about Tesseract OCR that [causes the text bounds to exclude the last character in a word](https://github.com/tesseract-ocr/tesseract/issues/2879). This is apparent in OCRmyPDF as well and in any other program that uses Tesseract. There is a ["patch"](https://github.com/tesseract-ocr/tesseract/issues/2879#issuecomment-583896719) that improves the issue for those who want to build Tesseract themselves.
 
+## Acknowledgements
+Thank you to the following github users whose code was modified for this project:
+
+deskewing routine from [endolith](https://gist.github.com/endolith/334196bac1cac45a4893#)'s gist
+
+CCITT G4 encoding routine from [josch](https://github.com/josch/img2pdf)'s  img2pdf tool
+
+
 ### to-do:
 - finesse handling of pages containing images without text
 - apply deskewing to pre-existing hOCR layer
