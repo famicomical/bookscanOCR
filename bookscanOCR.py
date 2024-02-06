@@ -173,9 +173,8 @@ def do_OCR(pdfbytes):
             pagedoc.xref_set_key(xref,'DecodeParms',f"<</Colors 1/BlackIs1 true/K -1/Columns {binPIL.width}/BitsPerComponent 1>>")
             return pagedoc.convert_to_pdf()
 
-
 ########################################################
-#                       main code                      #
+#                        parser                        #
 ########################################################
 
 def parse_arguments():
@@ -204,6 +203,10 @@ def parse_arguments():
     parser.add_argument('--keywords', type=str, default='', help="'' comma-separated")
 
     return parser.parse_args()
+
+########################################################
+#                       main code                      #
+########################################################
 
 def main():
     args = parse_arguments()
