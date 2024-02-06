@@ -63,7 +63,7 @@ optional arguments:
 
 1- The program assumes your input PDF only contains one image per page.
 
-2- There is a quirk about Tesseract OCR that [causes the text bounds to exclude the last character in a word](https://github.com/tesseract-ocr/tesseract/issues/2879). This is apparent in OCRmyPDF as well and in any other program that uses Tesseract. There is a ["patch"](https://github.com/tesseract-ocr/tesseract/issues/2879#issuecomment-583896719) that improves the issue for those who want to build Tesseract themselves.
+2- There is a quirk about Tesseract OCR that [causes the text bounds to exclude the last character in a word](https://github.com/tesseract-ocr/tesseract/issues/2879). The issue is apparent in files produced by any program that uses Tesseract. There is a ["patch"](https://github.com/tesseract-ocr/tesseract/issues/2879#issuecomment-583896719) that improves the issue for those who want to build Tesseract themselves.
 
 ## Acknowledgements
 Thank you to the following github users whose code was modified for this project:
