@@ -1,9 +1,9 @@
 # bookscanOCR
 A command-line program to deskew and OCR text in PDF documents. Ideal for scanned books where each image corresponds to a page. 
 
-Compare to [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF/) but simplified for the specific use case of books.
-
 ![before](images/before.png) ![after](images/after.gif)
+
+Compare to [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF/) but simplified for the specific use case of books.
 
 ## Features
 - Generates a searchable PDF from one containing images only
