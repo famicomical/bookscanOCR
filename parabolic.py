@@ -20,6 +20,8 @@ def parabolic(f, x):
     Out[4]: (3.2142857142857144, 6.1607142857142856)
 
     """
+    # if f[x]==f[-1] or f[x]==f[0]:
+    # 	return (x,0)
     xv = 1/2. * (f[x-1] - f[x+1]) / (f[x-1] - 2 * f[x] + f[x+1]) + x
     yv = f[x] - 1/4. * (f[x-1] - f[x+1]) * (xv - x)
     return (xv, yv)
@@ -33,8 +35,8 @@ def parabolic_polyfit(f, x, n):
     n is the number of samples of the curve used to fit the parabola.
 
     """
-    if x==0:
-        return (90,0)
+    # if f[x]==f[-1] or f[x]==f[0]:
+    # 	return (x,0)
     xarr=arange(x-n//2, (x+n//2+1))
     fxarr=f[(x-n//2):(x+n//2+1)]
     a, b, c = polyfit(xarr, fxarr, 2)

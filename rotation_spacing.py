@@ -17,7 +17,8 @@ try:
     from parabolic import parabolic, parabolic_polyfit
 
     def argmax(x):
-	    return parabolic_polyfit(x, np.argmax(x),3)[0]
+	    # return parabolic_polyfit(x, np.argmax(x),3)[0]
+	    return parabolic(x, np.argmax(x))[0]
 except ImportError:
     from numpy import argmax
 

@@ -21,6 +21,7 @@ import pytesseract
 import fitz
 from sklearn.mixture import GaussianMixture
 from rotation_spacing import get_angle
+from pageselect import selectioncut
 from transcode_monochrome import transcode_monochrome
 
 from tqdm import tqdm
@@ -93,6 +94,7 @@ def not_empty(image):
 #thresholding
 def thresholding(image):
     thresholded= cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    # thresholded= cv2.adaptiveThreshold(image, 255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY ,23,2)
 
     if not_empty(thresholded):
         return thresholded
@@ -120,9 +122,17 @@ def deskew(image):
 # task for parallelization. input/output bytes of Document containing a single Page, which contains a single image
 def do_OCR(pdfbytes):
     pagedoc=fitz.open(stream=pdfbytes,filetype='pdf')
-    #extract image from page and do pre-OCR processing -- assumes one image per page
-    img=Image.open(BytesIO(pagedoc.extract_image(pagedoc[0].get_images()[0][0])['image']))
-    dpi=calcdpi(img.width,pagedoc[0].cropbox.width)
+    dpi=getdpi(pagedoc,0)
+    #extract image from page and do pre-OCR processing 
+    #rasterize if more than one image per page
+    im_infolist=pagedoc[0].get_images()
+    if len(im_infolist)>1:
+        img=Image.open(BytesIO(pagedoc[0].get_pixmap(dpi=dpi).tobytes()))
+    elif len(im_infolist)==1:
+        img=Image.open(BytesIO(pagedoc.extract_image(im_infolist[0][0])['image']))
+    else:
+        quit('no images in pdf')
+
     img=img.convert('L').rotate(pagedoc[0].rotation) #convert to grayscale
     img=np.array(img)
     img=thresholding(deskew(img))
@@ -184,10 +194,12 @@ def parse_arguments():
     parser.add_argument('input_file', help='Input PDF file for OCR')
     # Output file (optional)
     parser.add_argument('--output_file', help='Output file name - if not provided, it will be set to input_file + "_OCR"')
+    # Page Intervals
+    parser.add_argument('--page_intervals', default=None, help='Comma-separated string of page intervals -- two integers separated by a hyphen, 1-indexing')
     # Language
     parser.add_argument('--lang', type=str, default='eng', help='Language selection for OCR. Options: '+str(pytesseract.get_languages(config='')))
     # Preserve Front Cover
-    parser.add_argument('--front-cover', action='store_true', default=False, help='Pass the first page of the input PDF to the output unchanged. Default is False')
+    parser.add_argument('--front-cover', action='store_true', default=False, help='Pass the first page of the input PDF to the output unchanged. Applies after page_intervals')
     # Preserve Back Cover
     parser.add_argument('--back-cover', action='store_true', default=False, help='Pass the final page of the input PDF to the output unchanged. Default is False')
     # Angle Range for Deskew Correction
@@ -238,6 +250,8 @@ def main():
 
     #import pdf, start output file generation
     indoc=fitz.open(infile+'.pdf')
+    if isinstance(args.page_intervals, str):
+        indoc=selectioncut(args.page_intervals,indoc)
     pagecount=indoc.page_count
     ocrfile=fitz.open()
 
