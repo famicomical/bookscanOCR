@@ -51,7 +51,7 @@ optional arguments:
                         Comma-separated string of page intervals  -- e.g. "3,5-7,21" -- use 1-indexing 
   --lang LANG           Language selection for OCR. Default is 'eng'
   --front-cover         Pass first page of input PDF to output unchanged. Applies after page_intervals
-  --back-cover          Pass the final page of the input PDF to the output unchanged. Default is False
+  --back-cover          Pass final page of input PDF to output unchanged. Default is False, as above
   --angle-range ANGLE_RANGE
                         Deskewing: search for optimal angle between +/- angle_range degrees. Default: 2
   --skip-ocr            Perform deskewing and thresholding / compression only
