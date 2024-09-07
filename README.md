@@ -1,9 +1,9 @@
 # bookscanOCR
 A command-line program to deskew and OCR text in PDF documents. Ideal for scanned books where each image corresponds to a page. 
 
-Compare to [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF/) but simplified for the specific use case of books.
-
 ![before](images/before.png) ![after](images/after.gif)
+
+Compare to [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF/) but simplified for the specific use case of books.
 
 ## Features
 - Generates a searchable PDF from one containing images only
@@ -16,7 +16,7 @@ Compare to [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF/) but simplified for 
 - Runs offline
 
 ## Installation
-First, install [Python](https://www.python.org/downloads/) (3.8+)
+First, install [Python](https://www.python.org/downloads/) or update your installation to 3.8+
 
 You can then use pip to install the following dependencies:
 `pip install numpy`
@@ -26,7 +26,7 @@ You can then use pip to install the following dependencies:
 `pip install PyMuPDF`
 `pip install pytesseract`
 
-Place the .py scripts from this repository into your project directory, and, if you're on Windows, grab jbig2.exe from [here](https://sourceforge.net/projects/jbig2enc/files/latest/download) and place it in the same directory.
+Place the .py scripts from this repository into your project directory. If you're on Windows, grab jbig2.exe from [here](https://sourceforge.net/projects/jbig2enc/files/latest/download) and place it in the same directory.
 
 ## Usage
 `>python bookscanOCR.py -h`
@@ -63,7 +63,7 @@ optional arguments:
 
 1- The program assumes your input PDF only contains one image per page.
 
-2- There is a quirk about Tesseract OCR that [causes the text bounds to exclude the last character in a word](https://github.com/tesseract-ocr/tesseract/issues/2879). This is apparent in OCRmyPDF as well and in any other program that uses Tesseract. There is a ["patch"](https://github.com/tesseract-ocr/tesseract/issues/2879#issuecomment-583896719) that improves the issue for those who want to build Tesseract themselves.
+2- There is a quirk about Tesseract OCR that [causes the text bounds to exclude the last character in a word](https://github.com/tesseract-ocr/tesseract/issues/2879). The issue is apparent in files produced by any program that uses Tesseract. There is a ["patch"](https://github.com/tesseract-ocr/tesseract/issues/2879#issuecomment-583896719) that improves the issue for those who want to build Tesseract themselves.
 
 ## Acknowledgements
 Thank you to the following github users whose code was modified for this project:
@@ -76,3 +76,4 @@ CCITT G4 encoding routine from [josch](https://github.com/josch/img2pdf)'s  img2
 ### to-do:
 - finesse handling of pages containing images without text
 - apply deskewing to pre-existing hOCR layer
+- make scaling more robust by chopping input file according to available memory
