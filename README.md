@@ -48,13 +48,14 @@ optional arguments:
   --output_file OUTPUT_FILE
                         Output file name - if not provided, it will be set to input_file + "_OCR"
   --page_intervals PAGE_INTERVALS
-                        Comma-separated string of page intervals -- two integers separated by a hyphen, 1-indexing
+                        Comma-separated string of page intervals  -- e.g. "3,5-7,21" -- use 1-indexing 
   --lang LANG           Language selection for OCR. Default is 'eng'
   --front-cover         Pass the first page of the input PDF to the output unchanged. Applies after page_intervals
   --back-cover          Pass the final page of the input PDF to the output unchanged. Default is False
   --angle-range ANGLE_RANGE
                         Deskewing: search for optimal angle between +/- angle_range degrees. Default is 2
   --skip-ocr            Perform deskewing and thresholding / compression only
+  --dpi-cap DPI_CAP     Output PDF resolution matches input unless greater than cap. Default is None
   --clustering          Use GMM clustering to detect empty pages
   --title TITLE         Set tags in metadata. Place input string in quotes.
   --author AUTHOR       ''
