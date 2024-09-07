@@ -30,15 +30,17 @@ from tqdm import tqdm
 #                      image proc                     #
 ########################################################
 
-def initializer(angle_range, skip_ocr, clustering,lang):
+def initializer(angle_range, skip_ocr, clustering,lang,dpi_cap):
     global anglerange
     global skipOCR
     global useclustering
     global language
+    global dpicap
     anglerange=angle_range
     skipOCR=skip_ocr
     useclustering=clustering
     language=lang
+    dpicap=dpi_cap
 
 # check if tesseract ocr returns an empty string -- easy blank page detection
 def has_text(image):
@@ -53,14 +55,15 @@ def GMM_means_test(image):
     distance= np.abs(meanslist[0]-meanslist[1])
     return not (distance<30)     #if distance between means is <30, safe to assume the page is blank
 
-#get dpi of page in document given its pagenumber, uses extracted image width and page cropbox width
-def getdpi(pdf, pageno):
-    pageimage=Image.open(BytesIO(pdf.extract_image(pdf[pageno].get_images()[0][0])['image']))
-    return round(pageimage.width/pdf[0].cropbox.width*72)
-
 #return dpi given the width of an image and the width of a pdf cropbox
 def calcdpi(imagewidth, cropwidth):
     return round(imagewidth/cropwidth*72)
+
+#get dpi of page in document given its pagenumber, uses max image width and page cropbox width
+def getdpi(pdf, pageno):
+    imlist=pdf[pageno].get_images()
+    width=np.max([imlist[n][2] for n in range(len(imlist))])
+    return calcdpi(width,pdf[pageno].cropbox.width)
 
 # noise removal
 def remove_noise(image):
@@ -119,20 +122,23 @@ def deskew(image):
 #                       doc proc                       #
 ########################################################
 
-# task for parallelization. input/output bytes of Document containing a single Page, which contains a single image
+# task for parallelization. input/output bytes of Document containing a single Page
 def do_OCR(pdfbytes):
     pagedoc=fitz.open(stream=pdfbytes,filetype='pdf')
     dpi=getdpi(pagedoc,0)
-    #extract image from page and do pre-OCR processing 
-    #rasterize if more than one image per page
+    if dpicap and dpicap>72:
+    	dpi= dpi if dpi<dpicap else dpicap
+    #extract image from page
     im_infolist=pagedoc[0].get_images()
     if len(im_infolist)>1:
+    	#rasterize if more than one image per page
         img=Image.open(BytesIO(pagedoc[0].get_pixmap(dpi=dpi).tobytes()))
     elif len(im_infolist)==1:
         img=Image.open(BytesIO(pagedoc.extract_image(im_infolist[0][0])['image']))
     else:
         quit('no images in pdf')
 
+    #begin pre-OCR processing
     img=img.convert('L').rotate(pagedoc[0].rotation) #convert to grayscale
     img=np.array(img)
     img=thresholding(deskew(img))
@@ -145,7 +151,9 @@ def do_OCR(pdfbytes):
         if not skipOCR:
 	        pagepdf=pytesseract.image_to_pdf_or_hocr(binPIL,extension='pdf', config=f"--dpi {str(dpi)}", lang=language)
         else:
-            pagepdf=pdfbytes
+            png=BytesIO()
+            binPIL.save(png,format='png')
+            pagepdf=fitz.open(stream=png,filetype="PNG").convert_to_pdf()
         #convert temporary png file to jbig2
         with NamedTemporaryFile(delete=False) as temppng:
             binPIL.save(temppng, format='PNG')
@@ -175,13 +183,17 @@ def do_OCR(pdfbytes):
             return pagepdf
         else:
             # pagedoc=fitz.open(stream=pagedoc.convert_to_pdf())
-            xref=pagedoc[0].get_images()[0][0]
-            pagedoc.update_stream(xref,transcode_monochrome(binPIL), compress=False)
-            pagedoc.xref_set_key(xref,'BitsPerComponent','1')
-            pagedoc.xref_set_key(xref,'ColorSpace',"/DeviceGray")
-            pagedoc.xref_set_key(xref,'Filter',"/CCITTFaxDecode")
-            pagedoc.xref_set_key(xref,'DecodeParms',f"<</Colors 1/BlackIs1 true/K -1/Columns {binPIL.width}/BitsPerComponent 1>>")
-            return pagedoc.convert_to_pdf()
+            png=BytesIO()
+            binPIL.save(png,format='png')
+            pagepdf=fitz.open(stream=png,filetype="PNG").convert_to_pdf()
+            tifpdf=fitz.open(stream=pagepdf)
+            xref=tifpdf[0].get_images()[0][0]
+            tifpdf.update_stream(xref,transcode_monochrome(binPIL), compress=False)
+            tifpdf.xref_set_key(xref,'BitsPerComponent','1')
+            tifpdf.xref_set_key(xref,'ColorSpace',"/DeviceGray")
+            tifpdf.xref_set_key(xref,'Filter',"/CCITTFaxDecode")
+            tifpdf.xref_set_key(xref,'DecodeParms',f"<</Colors 1/BlackIs1 true/K -1/Columns {binPIL.width}/BitsPerComponent 1>>")
+            return tifpdf.convert_to_pdf()
 
 ########################################################
 #                        parser                        #
@@ -195,7 +207,7 @@ def parse_arguments():
     # Output file (optional)
     parser.add_argument('--output_file', help='Output file name - if not provided, it will be set to input_file + "_OCR"')
     # Page Intervals
-    parser.add_argument('--page_intervals', default=None, help='Comma-separated string of page intervals -- two integers separated by a hyphen, 1-indexing')
+    parser.add_argument('--page_intervals', default=None, help='Comma-separated string of page intervals -- e.g. "3,5-7,21" -- use 1-indexing')
     # Language
     parser.add_argument('--lang', type=str, default='eng', help='Language selection for OCR. Options: '+str(pytesseract.get_languages(config='')))
     # Preserve Front Cover
@@ -206,6 +218,8 @@ def parse_arguments():
     parser.add_argument('--angle-range', type=int, default=2, help='Deskewing: search for optimal angle between +/- angle_range degrees. Default is 2')
     # Skip OCR
     parser.add_argument('--skip-ocr', action='store_true', default=False, help='Perform deskewing and thresholding / compression only')
+    # DPI cap
+    parser.add_argument('--dpi-cap', type=int, default=None, help='Output PDF resolution matches input unless greater than cap. Default is None')
     # Use clustering for empty page detection
     parser.add_argument('--clustering', action='store_true', default=False, help='Use GMM clustering to detect empty pages')
     #metadata
@@ -273,7 +287,7 @@ def main():
     indocs=None
 
     #parallelize OCR task
-    pool=Pool(initializer=initializer, initargs=(args.angle_range,args.skip_ocr,args.clustering, args.lang))
+    pool=Pool(initializer=initializer, initargs=(args.angle_range,args.skip_ocr,args.clustering, args.lang,args.dpi_cap))
     outbytes=[]
     with tqdm(total=pagecount, desc="Processing", position=0) as pbar:
         for result in pool.imap(do_OCR, inbytes):
