@@ -47,8 +47,10 @@ optional arguments:
   -h, --help            show this help message and exit
   --output_file OUTPUT_FILE
                         Output file name - if not provided, it will be set to input_file + "_OCR"
+  --page_intervals PAGE_INTERVALS
+                        Comma-separated string of page intervals -- two integers separated by a hyphen, 1-indexing
   --lang LANG           Language selection for OCR. Default is 'eng'
-  --front-cover         Pass the first page of the input PDF to the output unchanged. Default is False
+  --front-cover         Pass the first page of the input PDF to the output unchanged. Applies after page_intervals
   --back-cover          Pass the final page of the input PDF to the output unchanged. Default is False
   --angle-range ANGLE_RANGE
                         Deskewing: search for optimal angle between +/- angle_range degrees. Default is 2
@@ -61,9 +63,7 @@ optional arguments:
 ```
 ## Notes
 
-1- The program assumes your input PDF only contains one image per page.
-
-2- There is a quirk about Tesseract OCR that [causes the text bounds to exclude the last character in a word](https://github.com/tesseract-ocr/tesseract/issues/2879). The issue is apparent in files produced by any program that uses Tesseract. There is a ["patch"](https://github.com/tesseract-ocr/tesseract/issues/2879#issuecomment-583896719) that improves the issue for those who want to build Tesseract themselves.
+There is a quirk about Tesseract OCR that [causes the text bounds to exclude the last character in a word](https://github.com/tesseract-ocr/tesseract/issues/2879). The issue is apparent in files produced by any program that uses Tesseract. There is a ["patch"](https://github.com/tesseract-ocr/tesseract/issues/2879#issuecomment-583896719) that improves the issue for those who want to build Tesseract themselves.
 
 ## Acknowledgements
 Thank you to the following github users whose code was modified for this project:
@@ -73,7 +73,7 @@ deskewing routine from [endolith](https://gist.github.com/endolith/334196bac1cac
 CCITT G4 encoding routine from [josch](https://github.com/josch/img2pdf)'s  img2pdf tool
 
 
-### to-do:
+### possible improvements:
 - finesse handling of pages containing images without text
 - apply deskewing to pre-existing hOCR layer
 - make scaling more robust by chopping input file according to available memory
