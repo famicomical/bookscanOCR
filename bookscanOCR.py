@@ -211,11 +211,11 @@ def parse_arguments():
     # Language
     parser.add_argument('--lang', type=str, default='eng', help='Language selection for OCR. Options: '+str(pytesseract.get_languages(config='')))
     # Preserve Front Cover
-    parser.add_argument('--front-cover', action='store_true', default=False, help='Pass the first page of the input PDF to the output unchanged. Applies after page_intervals')
+    parser.add_argument('--front-cover', action='store_true', default=False, help='Pass first page of input PDF to output unchanged. Applies after page_intervals')
     # Preserve Back Cover
-    parser.add_argument('--back-cover', action='store_true', default=False, help='Pass the final page of the input PDF to the output unchanged. Default is False')
+    parser.add_argument('--back-cover', action='store_true', default=False, help='Pass final page of input PDF to output unchanged. Default is False, as above')
     # Angle Range for Deskew Correction
-    parser.add_argument('--angle-range', type=int, default=2, help='Deskewing: search for optimal angle between +/- angle_range degrees. Default is 2')
+    parser.add_argument('--angle-range', type=int, default=2, help='Deskewing: search for optimal angle between +/- angle_range degrees. Default: 2')
     # Skip OCR
     parser.add_argument('--skip-ocr', action='store_true', default=False, help='Perform deskewing and thresholding / compression only')
     # DPI cap
