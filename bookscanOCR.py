@@ -2,16 +2,18 @@
 
 # Dependencies #
 # installable: opencv-contrib-python==4.5.5.64, numpy, tesseract, PyMuPDF (fitz), scikit-learn, and their dependencies...
-# 3 external files:  parabolic and rotation_spacing originally by github user endolith, transcode_monochrome from img2pdf by josch
+# 3 external files:  parabolic.py and rotation_spacing.py modified from endolith's code, transcode_monochrome.py from img2pdf by josch
 # Optional: jbig2.exe from jbig2enc -- currently assumes user is running windows
 
 from os import path, remove, getcwd
 from sys import exit
+import argparse
 from io import BytesIO
 from tempfile import NamedTemporaryFile
 from multiprocessing import Pool
 from subprocess import Popen, PIPE
-import argparse
+from tqdm import tqdm
+# import gc
 
 import cv2
 from PIL import Image
@@ -20,11 +22,10 @@ import numpy as np
 import pytesseract
 import fitz
 from sklearn.mixture import GaussianMixture
-from rotation_spacing import get_angle
-from pageselect import selectioncut
-from transcode_monochrome import transcode_monochrome
 
-from tqdm import tqdm
+from rotation_spacing import get_angle
+from pageselect import selection
+from transcode_monochrome import transcode_monochrome
 
 ########################################################
 #                      image proc                     #
@@ -124,77 +125,87 @@ def deskew(image):
 
 # task for parallelization. input/output bytes of Document containing a single Page
 def do_OCR(pdfbytes):
-    pagedoc=fitz.open(stream=pdfbytes,filetype='pdf')
-    dpi=getdpi(pagedoc,0)
-    if dpicap and dpicap>72:
-    	dpi= dpi if dpi<dpicap else dpicap
-    #extract image from page
-    im_infolist=pagedoc[0].get_images()
-    if len(im_infolist)>1:
-    	#rasterize if more than one image per page
-        img=Image.open(BytesIO(pagedoc[0].get_pixmap(dpi=dpi).tobytes()))
-    elif len(im_infolist)==1:
-        img=Image.open(BytesIO(pagedoc.extract_image(im_infolist[0][0])['image']))
-    else:
-        quit('no images in pdf')
+    try:
+        pagedoc=fitz.open(stream=pdfbytes,filetype='pdf')
+        
+        #dpi setting
+        ogdpi=getdpi(pagedoc,0)
+        dpi = dpicap if (dpicap and dpicap>72 and ogdpi>dpicap) else ogdpi
 
-    #begin pre-OCR processing
-    img=img.convert('L').rotate(pagedoc[0].rotation) #convert to grayscale
-    img=np.array(img)
-    img=thresholding(deskew(img))
-
-    #convert image to 1bpp Image
-    binPIL=Image.frombytes(mode='1', size=img.shape[::-1], data=np.packbits(img, axis=1))
-
-    #if jbig2.exe present perform an external compression step after OCR, 
-    if path.exists(path.join(getcwd(),'jbig2.exe')):
-        if not skipOCR:
-	        pagepdf=pytesseract.image_to_pdf_or_hocr(binPIL,extension='pdf', config=f"--dpi {str(dpi)}", lang=language)
+        #extract image from page
+        im_infolist=pagedoc[0].get_images()
+        if len(im_infolist)>1:
+        	#rasterize page that contains more than one image
+            img=Image.open(BytesIO(pagedoc[0].get_pixmap(dpi=dpi).tobytes()))
+        elif len(im_infolist)==1:
+            img=Image.open(BytesIO(pagedoc.extract_image(im_infolist[0][0])['image']))
+            if dpi!=ogdpi:
+                scaling_factor=dpi/ogdpi
+                img.thumbnail((img.size[0]*scaling_factor,img.size[1]*scaling_factor))
         else:
-            png=BytesIO()
-            binPIL.save(png,format='png')
-            pagepdf=fitz.open(stream=png,filetype="PNG").convert_to_pdf()
-        #convert temporary png file to jbig2
-        with NamedTemporaryFile(delete=False) as temppng:
-            binPIL.save(temppng, format='PNG')
-            temppng.close()
-            jb2conv=Popen(['jbig2.exe', '-p', temppng.name], stdout=PIPE, stderr=PIPE)
-            jb2out, stderr= jb2conv.communicate()
-            remove(temppng.name)
+            raise ValueError("No images found in the PDF page.")
 
-        #replace image with jbig2
-        jbig2pdf=fitz.open(stream=pagepdf,filetype='pdf')
-        xref=jbig2pdf[0].get_images()[0][0]
-        jbig2pdf.update_stream(xref, jb2out, compress=False)
-        jbig2pdf.xref_set_key(xref,'BitsPerComponent','1')
-        jbig2pdf.xref_set_key(xref,'ColorSpace',"/DeviceGray")
-        jbig2pdf.xref_set_key(xref,'Filter',"/JBIG2Decode")
-        jbig2pdf.xref_set_key(xref,'Decode',"[ 0 1 ]") # if you don't include this, the OCR images will be inverted
-        if not skipOCR:
-        	return jbig2pdf.tobytes()
-        else:
-        	return jbig2pdf.convert_to_pdf()
+        #grayscale and rotate with PIL, deskew and threshold with cv2
+        img=img.convert('L').rotate(pagedoc[0].rotation)
+        imarr=thresholding(deskew(np.array(img)))
+        del img
+        #convert cv2 image to 1bpp Image
+        binPIL=Image.frombytes(mode='1', size=imarr.shape[::-1], data=np.packbits(imarr, axis=1))
+        del imarr
 
-    else: # OCR with PIL's CCITT Group 4 compression
-        if not skipOCR:
-            tiff=BytesIO()
-            binPIL.save(tiff, format='tiff',compression='group4')
-            pagepdf=pytesseract.image_to_pdf_or_hocr(Image.open(tiff),extension='pdf', config=f"--dpi {str(dpi)}", lang=language)
-            return pagepdf
-        else:
-            # pagedoc=fitz.open(stream=pagedoc.convert_to_pdf())
-            png=BytesIO()
-            binPIL.save(png,format='png')
-            pagepdf=fitz.open(stream=png,filetype="PNG").convert_to_pdf()
-            tifpdf=fitz.open(stream=pagepdf)
-            xref=tifpdf[0].get_images()[0][0]
-            tifpdf.update_stream(xref,transcode_monochrome(binPIL), compress=False)
-            tifpdf.xref_set_key(xref,'BitsPerComponent','1')
-            tifpdf.xref_set_key(xref,'ColorSpace',"/DeviceGray")
-            tifpdf.xref_set_key(xref,'Filter',"/CCITTFaxDecode")
-            tifpdf.xref_set_key(xref,'DecodeParms',f"<</Colors 1/BlackIs1 true/K -1/Columns {binPIL.width}/BitsPerComponent 1>>")
-            return tifpdf.convert_to_pdf()
+        #if jbig2.exe present perform an external compression step after OCR, 
+        if path.exists(path.join(getcwd(),'jbig2.exe')):
+            if not skipOCR:
+    	        pagepdf=pytesseract.image_to_pdf_or_hocr(binPIL,extension='pdf', config=f"--dpi {str(dpi)}", lang=language)
+            else:
+                with BytesIO() as PILpdf:
+                    binPIL.save(PILpdf,format='PDF',resolution=dpi)
+                    pagepdf=fitz.open(stream=PILpdf,filetype="pdf").convert_to_pdf()
+            
+            #convert temporary png file to jbig2
+            with NamedTemporaryFile(delete=False) as temppng:
+                try:
+                    binPIL.save(temppng, format='PNG')
+                    temppng.close()
+                    jb2conv = Popen(['jbig2.exe', '-p', temppng.name], stdout=PIPE, stderr=PIPE)
+                    jb2out, stderr = jb2conv.communicate(timeout=60)
+                    if jb2conv.returncode != 0:
+                        raise RuntimeError(f"jbig2.exe error: {stderr.decode()}")
+                finally:
+                    remove(temppng.name)
 
+            #replace image with jbig2
+            with fitz.open(stream=pagepdf, filetype='pdf') as jbig2pdf:
+                del pagepdf
+                xref=jbig2pdf[0].get_images()[0][0]
+                jbig2pdf.update_stream(xref, jb2out, compress=False)
+                del jb2out
+                jbig2pdf.xref_set_key(xref,'BitsPerComponent','1')
+                jbig2pdf.xref_set_key(xref,'ColorSpace',"/DeviceGray")
+                jbig2pdf.xref_set_key(xref,'Filter',"/JBIG2Decode")
+                jbig2pdf.xref_set_key(xref,'Decode',"[ 0 1 ]") # if you don't include this, the OCR images will be inverted
+                return jbig2pdf.tobytes() if not skipOCR else jbig2pdf.convert_to_pdf()
+
+        else: # OCR with PIL's CCITT Group 4 compression
+            if not skipOCR:
+                with BytesIO() as tiff:
+                    binPIL.save(tiff, format='tiff',compression='group4')
+                    return pytesseract.image_to_pdf_or_hocr(Image.open(tiff),extension='pdf', config=f"--dpi {str(dpi)}", lang=language)
+            else:
+                with BytesIO() as PILpdf:
+                    binPIL.save(PILpdf,format='PDF',resolution=dpi)
+                    with fitz.open(stream=PILpdf,filetype="pdf") as tifpdf:
+                        xref=tifpdf[0].get_images()[0][0]
+                        tifpdf.update_stream(xref,transcode_monochrome(binPIL), compress=False)
+                        tifpdf.xref_set_key(xref,'BitsPerComponent','1')
+                        tifpdf.xref_set_key(xref,'ColorSpace',"/DeviceGray")
+                        tifpdf.xref_set_key(xref,'Filter',"/CCITTFaxDecode")
+                        tifpdf.xref_set_key(xref,'DecodeParms',f"<</Colors 1/BlackIs1 true/K -1/Columns {binPIL.width}/BitsPerComponent 1>>")
+                        return tifpdf.convert_to_pdf()
+    finally:
+        del pagedoc
+        del binPIL
+        # gc.collect()
 ########################################################
 #                        parser                        #
 ########################################################
@@ -207,13 +218,13 @@ def parse_arguments():
     # Output file (optional)
     parser.add_argument('--output_file', help='Output file name - if not provided, it will be set to input_file + "_OCR"')
     # Page Intervals
-    parser.add_argument('--page_intervals', default=None, help='Comma-separated string of page intervals -- e.g. "3,5-7,21" -- use 1-indexing')
+    parser.add_argument('--page_intervals', default=None, help='Comma-separated string of page numbers to keep in selection -- e.g. "3,5-7,21"')
     # Language
     parser.add_argument('--lang', type=str, default='eng', help='Language selection for OCR. Options: '+str(pytesseract.get_languages(config='')))
     # Preserve Front Cover
     parser.add_argument('--front-cover', action='store_true', default=False, help='Pass first page of input PDF to output unchanged. Applies after page_intervals')
     # Preserve Back Cover
-    parser.add_argument('--back-cover', action='store_true', default=False, help='Pass final page of input PDF to output unchanged. Default is False, as above')
+    parser.add_argument('--back-cover', action='store_true', default=False, help='Pass final page of selection to output unchanged. Default is False, as above')
     # Angle Range for Deskew Correction
     parser.add_argument('--angle-range', type=int, default=2, help='Deskewing: search for optimal angle between +/- angle_range degrees. Default: 2')
     # Skip OCR
@@ -231,44 +242,60 @@ def parse_arguments():
     return parser.parse_args()
 
 ########################################################
-#                       main code                      #
+#                      generator                       #
+########################################################
+
+#extract page from a fitz pdf object and pickle it. frontcover & backcover are booleans
+def generate_inbytes(doc, frontcover,backcover):
+    fc=int(frontcover)
+    for i in range(doc.page_count-fc-int(backcover)):
+        pagedoc=fitz.open()
+        pagedoc.insert_pdf(doc,i+fc,i+fc)
+        docbytes=pagedoc.tobytes()
+        yield docbytes
+        pagedoc.close()
+        del pagedoc
+        del docbytes
+
+########################################################
+#                      main code                       #
 ########################################################
 
 def main():
     args = parse_arguments()
-    if args.skip_ocr:
-        suff='_mono.pdf'
-    else:
-        suff='_OCR.pdf'
-    # parse the arguments
+
+    # Determine file suffix based on OCR flag
+    suff = '_mono.pdf' if args.skip_ocr else '_OCR.pdf'
+
+    # Input file processing
     infile = args.input_file
     if infile.lower().endswith('.pdf'):
-        infile=infile[:len(infile)-len('.pdf')]
-    if not path.exists(infile+'.pdf'):
-        print(f"Error: The file '{infile+'.pdf'}' does not exist")
+        infile = infile[:len(infile) - len('.pdf')]
+    if not path.exists(infile + '.pdf'):
+        print(f"Error: The file '{infile + '.pdf'}' does not exist")
         exit(1)
-    if args.output_file:
-    	outfile = args.output_file
-    	if not outfile.lower().endswith('.pdf'):
-    		outfile+='.pdf'
-    else:
-    	outfile = infile+suff
-    if path.exists(outfile):
-    	print(f"Error: The file '{outfile}' already exists")
-    	proceed=input("Overwrite (Y/N?): ")
-    	if not proceed.lower()=='y':
-	        exit(1)
-    frontcover = args.front_cover
-    backcover = args.back_cover
-    
 
-    #import pdf, start output file generation
+    # Output file handling
+    outfile = args.output_file or infile + suff
+    if not outfile.lower().endswith('.pdf'):
+        outfile += '.pdf'
+    if path.exists(outfile):
+        print(f"Error: The file '{outfile}' already exists")
+        proceed = input("Overwrite (Y/N?): ")
+        if not proceed.lower() == 'y':
+            exit(1)
+
+    # Front and back cover options
+    frontcover, backcover = args.front_cover, args.back_cover
+    
+    #import pdf, select pages
     indoc=fitz.open(infile+'.pdf')
     if isinstance(args.page_intervals, str):
-        indoc=selectioncut(args.page_intervals,indoc)
+        indoc=selection(args.page_intervals,indoc)
     pagecount=indoc.page_count
-    ocrfile=fitz.open()
 
+    # start output file generation
+    ocrfile=fitz.open()
     #cover image preservation handling
     if frontcover: # copy cover image unchanged
         pagecount-=1
@@ -276,47 +303,44 @@ def main():
     if backcover:
         pagecount-=1
 
-    #extract pages into a list of fitz pdf objects and pickle them
-    indocs=[fitz.open() for i in range(pagecount)]
-    for i in range(pagecount):
-        if frontcover:
-            indocs[i].insert_pdf(indoc,i+1,i+1)
-        else:
-            indocs[i].insert_pdf(indoc,i,i)
-    inbytes=[doc.tobytes() for doc in indocs]
-    indocs=None
-
     #parallelize OCR task
-    pool=Pool(initializer=initializer, initargs=(args.angle_range,args.skip_ocr,args.clustering, args.lang,args.dpi_cap))
-    outbytes=[]
-    with tqdm(total=pagecount, desc="Processing", position=0) as pbar:
-        for result in pool.imap(do_OCR, inbytes):
-            outbytes.append(result)
-            pbar.update()
-        pool.close()
-        pool.join()
-
-    #write resulting single-page pdfs to a file
-    outdocs= [fitz.open(stream=doc,filetype='pdf') for doc in outbytes]
-    for doc in outdocs:
-        ocrfile.insert_pdf(doc)
+    with Pool(initializer=initializer, initargs=(args.angle_range, args.skip_ocr, args.clustering, args.lang,args.dpi_cap)) as pool:
+        with tqdm(total=pagecount, desc="Processing", position=0) as pbar:
+            for result in pool.imap(do_OCR, generate_inbytes(indoc,frontcover,backcover)):
+                respdf=fitz.open(stream=result, filetype='pdf')
+                ocrfile.insert_pdf(respdf)
+                respdf.close()
+                del respdf
+                del result
+                pbar.update()
+            pool.close()
+            pool.join()
 
     if backcover: #copy back cover
         ocrfile.insert_pdf(indoc, pagecount-1, pagecount-1) 
 
+    # update metadata
     metadata=indoc.metadata
-    if args.title:
-        metadata['title']=args.title
-    if args.author:
-        metadata['author']=args.author
-    if args.keywords:
-        metadata['keywords']=args.keywords
-    if args.subject:
-        metadata['subject']=args.subject
+    for key, value in vars(args).items():
+        if key in ['title', 'author', 'keywords', 'subject'] and value:
+            metadata[key] = value
     ocrfile.set_metadata(metadata)
 
-    ocrfile.save(outfile, garbage=3)
-    print(f"Saved result as {outfile}")
+    # save result
+    try:
+        ocrfile.save(outfile, garbage=3)
+        print(f"Saved result as {outfile}")
+    except:
+        print(f"Permission denied for filename {outfile}")
+        # Generate a new file name by appending a timestamp
+        from time import time
+        new_outfile = f"{outfile[:-4]}_{int(time())}.pdf"
+        try:
+            ocrfile.save(new_outfile, garbage=3)
+            print(f"PDF saved successfully with a new name: {new_outfile}")
+        except:
+            print(f"Failed to save pdf even with new name")
+            exit(1)
 
 if __name__ == '__main__':
     main()
